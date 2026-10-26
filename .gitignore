@@ -1,0 +1,14 @@
+node_modules/
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 本机脱敏黑名单：里面是真实账号/群号/人名，**绝不提交**
+scripts/redact-denylist.txt
+*denylist.local.txt
+
+# 构建中间产物
+docs/error-dict/_inbox/*.tmp
