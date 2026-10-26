@@ -2,7 +2,7 @@
 
 > 自动生成，请勿手改。找错误时先在这里搜关键词。
 
-共 128 条，关键词 68 个。
+共 131 条，关键词 68 个。
 
 | 关键词 | 条目 | 标题 |
 |---|---|---|
@@ -46,6 +46,8 @@
 | `（无关键词）` | ERR-OPS-1202 | `<workspace>/_backup` 在 workspace-write 沙箱下写入被拒，`_outputs` 可以 |
 | `（无关键词）` | ERR-OPS-1214 | 接入第二个 provider 后，体检报「patch id 重复」（模型 id 与插件 id 被当成同一张表算） |
 | `（无关键词）` | ERR-OPS-1216 | 脱敏正则只认反斜杠：公开版依旧漏出 `C:\Users\<user>/...` |
+| `（无关键词）` | ERR-OPS-1217 | 校验器只验「现有的对不对」，仓库缺了一半照样报 ✓ 通过 |
+| `（无关键词）` | ERR-OPS-1218 | 剥反引号写成「首尾各剥一次」，字段值在 md ↔ JSON 往返中静默变形 283 处 |
 | `（无关键词）` | ERR-OPS-841 | 失败日志 ID 写成 F-2026-10-23-0010（多一段日期），按 F-04 只追加标注 |
 | `（无关键词）` | ERR-OPS-843 | 取样瞬时导致误报 NapCat 掉线：把「某一刻没在听」当成「服务挂了」 |
 | `（无关键词）` | ERR-OPS-845 | journey-sampler 计划任务写成 LogonTrigger，描述却写 every 20min，21.5 小时没触发 |
@@ -112,6 +114,7 @@
 | `DSH` | ERR-QQ-726 | 在 AI 回合进行中重启桥接：掐断回合 + 防卡死租约丢失，会话永久繁忙 |
 | `EDIT_CONFLICT` | ERR-ENV-004 | ops_edit_file 改 CRLF 大文件：用 \n 拼的多行 oldText 一律 EDIT_CONFLICT |
 | `ENAMETOOLONG` | ERR-MEDIA-002 | ENAMETOOLONG：add_custom_face 只认文件路径，传 base64:// 会被当路径去 stat |
+| `ENV` | ERR-ENV-1217 | git archive 打 tar + Windows tar.exe 解包，中文文件名变八进制转义，文件静默丢失 |
 | `ENV` | ERR-OPS-1215 | 占位文本检查把代码通配符当成「待补充」：两条写得完整的根因被误报 |
 | `EPERM` | ERR-ENV-305 | 子进程（node/python/curl）写 projects\local-video 一律 EPERM，同一时刻 DSH 原生文件工具却能写 |
 | `ERR` | ERR-OPS-1215 | 占位文本检查把代码通配符当成「待补充」：两条写得完整的根因被误报 |

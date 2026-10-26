@@ -134,6 +134,14 @@ if (!files.length) {
   process.exit(1);
 }
 
+// 分类卷必须齐。踩过：用 tar 抽仓库时 UTF-8 文件名被弄乱，只抽出 4 卷，
+// 校验依旧报「✓ 通过 / 50 条」—— 少了一半词条而无人发现。
+// 校验器的职责不是“现有文件合法”，而是“仓库是完整的”。
+const present = new Set(files.map((f) => f.slice(3).split('-')[0]));
+for (const cls of Object.keys(CLASSES)) {
+  if (!present.has(cls)) errors.push(`缺少分类卷：${cls}（${CLASSES[cls]}）`);
+}
+
 const all = [];
 for (const file of files) {
   const expectCls = file.match(/^\d{2}-([A-Z]+)-/)[1];

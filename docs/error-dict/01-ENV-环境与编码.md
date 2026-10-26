@@ -3,7 +3,7 @@
 > 这一卷收「东西没跑起来 / 中文变乱码 / 路径找不到 / 编码炸了」这类问题。
 > 新增词条直接往下追加，骨架见 [_TEMPLATE.md](_TEMPLATE.md)。
 
-共 22 条。
+共 23 条。
 
 ## ERR-ENV-001 | 中文 .ps1 丢了 UTF-8 BOM，PS 5.1 报几十处 ParseError、控制台还全是乱码
 
@@ -259,3 +259,16 @@
 - 回滚点: 无。
 - 防护: 配置校验脚本固定用 js-yaml；`scripts/build-error-dict.mjs` 这类 Node 脚本天生规避。
 - 关联: F-2026-10-0008（reasoningEfforts 声明缺失会把模型挡在门外，校验器必须可信）
+
+## ERR-ENV-1217 | git archive 打 tar + Windows tar.exe 解包，中文文件名变八进制转义，文件静默丢失
+
+- 症状: 为验证「别人 clone 下来能不能跑通」，用 `git archive` 打 tar，再用 Windows 自带 `tar.exe` 解到临时目录；解完只剩 15 个文件（应 19 个），4 个带中文的卷名根本没落地，而命令"看起来跑完了"。
+- 错误原文: `docs/error-dict/01-ENV-\257\345\242\203与编码.md: Invalid empty pathname: Unknown error`（4 个中文卷名各一行，中文被转成八进制）末尾 `tar.exe: Error exit delayed from previous errors`
+- 触发条件: `git archive -o x.tar HEAD` 后用 `C:\Windows\System32\tar.exe -xf x.tar` 解开，且仓库里有非 ASCII 文件名。
+- 根因: git 写 tar 时按 UTF-8 存文件名但没置 pax 的 UTF-8 标志；Windows 的 bsdtar 按当前 ANSI 代码页解码，得到非法字节序列后**放弃这几个条目**，并把解码为空的路径报成 "Invalid empty pathname"。不是权限、不是磁盘。
+- 影响: 只影响"离线自测干净副本"这一步，不影响交付；真正的危害是静默——tar 退出码为 1、被夹在一屏 stderr 里，只数"抽出文件数"会以为成功。
+- 解决: 干净副本不要走 tar。两条路：① `robocopy 源 目标 /E /XD .git`（本机采用，19 文件 / 8 卷 / 128 条，`--check` 通过）；② `git clone` 本地路径——但沙箱里 git 会起 `sh.exe` 建信号管道被拦（`*** fatal error - couldn't create signal pipe, Win32 error 5`），所以最终用 robocopy。
+- 证据: 2026-10-26 22:0x 本机实测（`_outputs\ed-clone-test`、`_outputs\ed-head.tar`）；`docs/error-dict/_public/scripts/build.mjs`
+- 回滚点: 无（只动了 `_outputs\` 下的临时目录与 tar 包，已删）
+- 防护: 解包后**先数文件数再跑校验**，两个数对不上就当失败；沙箱内 `git clone` 不可用属于已知边界（管道被拦），别硬试。
+- 关联: ERR-OPS-1217（同一轮暴露：文件少了，校验却报通过）

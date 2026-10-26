@@ -3,15 +3,15 @@
   "license": "CC-BY-4.0",
   "generatedAt": "2026-10-26",
   "note": "本文件由 scripts/build.mjs 从 docs/error-dict/0x-*.md 生成，请勿手改。源文件是 markdown。",
-  "count": 128,
+  "count": 131,
   "byClass": {
     "COST": 4,
     "DSH": 24,
     "DY": 6,
-    "ENV": 22,
+    "ENV": 23,
     "MEDIA": 16,
     "NET": 5,
-    "OPS": 27,
+    "OPS": 29,
     "QQ": 24
   },
   "entries": [
@@ -755,6 +755,21 @@
       "related": "F-2026-10-0008（reasoningEfforts 声明缺失会把模型挡在门外，校验器必须可信）"
     },
     {
+      "id": "ERR-ENV-1217",
+      "cls": "ENV",
+      "title": "git archive 打 tar + Windows tar.exe 解包，中文文件名变八进制转义，文件静默丢失",
+      "symptom": "为验证「别人 clone 下来能不能跑通」，用 `git archive` 打 tar，再用 Windows 自带 `tar.exe` 解到临时目录；解完只剩 15 个文件（应 19 个），4 个带中文的卷名根本没落地，而命令\"看起来跑完了\"。",
+      "rawError": "`docs/error-dict/01-ENV-\\257\\345\\242\\203与编码.md: Invalid empty pathname: Unknown error`（4 个中文卷名各一行，中文被转成八进制）末尾 `tar.exe: Error exit delayed from previous errors`",
+      "trigger": "`git archive -o x.tar HEAD` 后用 `C:\\Windows\\System32\\tar.exe -xf x.tar` 解开，且仓库里有非 ASCII 文件名。",
+      "rootCause": "git 写 tar 时按 UTF-8 存文件名但没置 pax 的 UTF-8 标志；Windows 的 bsdtar 按当前 ANSI 代码页解码，得到非法字节序列后**放弃这几个条目**，并把解码为空的路径报成 \"Invalid empty pathname\"。不是权限、不是磁盘。",
+      "impact": "只影响\"离线自测干净副本\"这一步，不影响交付；真正的危害是静默——tar 退出码为 1、被夹在一屏 stderr 里，只数\"抽出文件数\"会以为成功。",
+      "fix": "干净副本不要走 tar。两条路：① `robocopy 源 目标 /E /XD .git`（本机采用，19 文件 / 8 卷 / 128 条，`--check` 通过）；② `git clone` 本地路径——但沙箱里 git 会起 `sh.exe` 建信号管道被拦（`*** fatal error - couldn't create signal pipe, Win32 error 5`），所以最终用 robocopy。",
+      "evidence": "2026-10-26 22:0x 本机实测（`_outputs\\ed-clone-test`、`_outputs\\ed-head.tar`）；`docs/error-dict/_public/scripts/build.mjs`",
+      "rollback": "无（只动了 `_outputs\\` 下的临时目录与 tar 包，已删）",
+      "guard": "解包后**先数文件数再跑校验**，两个数对不上就当失败；沙箱内 `git clone` 不可用属于已知边界（管道被拦），别硬试。",
+      "related": "ERR-OPS-1217（同一轮暴露：文件少了，校验却报通过）"
+    },
+    {
       "id": "ERR-MEDIA-001",
       "cls": "MEDIA",
       "title": "表情库被清空成 0 条：12 条收藏表情全没了，且没有备份",
@@ -1362,6 +1377,36 @@
       "rollback": "旧规则在 git 历史里，回滚即恢复 9 处泄露",
       "guard": "脱敏后必须**反向扫一次**（拿敏感模式去 grep 产物），不能只相信“规则跑过了”；Windows 路径的两种分隔符、`\\\\?\\` 长路径前缀、UNC 路径、`%USERPROFILE%` 都要列进规则。**新增任何字段时，先问一句“这个字段也会进 public 吗”**——字段是白名单逐个列的，加字段忘了加脱敏就会漏。",
       "related": "ERR-DSH-1204（就是那条带 `C:\\Users\\<user> 的条目）"
+    },
+    {
+      "id": "ERR-OPS-1217",
+      "cls": "OPS",
+      "title": "校验器只验「现有的对不对」，仓库缺了一半照样报 ✓ 通过",
+      "symptom": "上面那次 tar 只抽出 15 个文件、4 个分类卷丢失，`node scripts/build.mjs --check` 依旧输出 `✓ 校验通过：4 卷 / 50 条` 并 exit 0。",
+      "rawError": "`✓ 校验通过：4 卷 / 50 条`（完整时应为 `✓ 校验通过：8 卷 / 128 条`）",
+      "trigger": "任何导致分类卷文件缺失的情况——拷贝中断、分支误删、`.gitignore` 误伤、归档工具丢文件。",
+      "rootCause": "校验器用 `fs.readdirSync` 枚举「目录里有什么」，只对枚举到的文件做逐条校验；`CLASSES` 常量只用于生成标题，从未反向检查「8 个分类是否都在」。缺一半时它没有任何依据判断\"应该有几卷\"，于是把\"少量合法文件\"当成\"通过\"。",
+      "impact": "比崩溃更坏——它给的是绿色通过。若接进 CI，会带着半套词典发版而无人察觉。",
+      "fix": "枚举完后再求 `present` 与 `CLASSES` 的差集，缺一卷报一条错；错误数非零即不生成任何文件、exit 1。",
+      "evidence": "`docs/error-dict/_public/scripts/build.mjs` 主流程段；复测删掉 COST 卷后输出 `✗ 缺少分类卷：COST（成本 / 上下文 / token）` + exit=1",
+      "rollback": "无（纯增加判断，不改既有行为）",
+      "guard": "校验器要问「**应该有什么**」，不能只问「**有的对不对**」。凡\"清单型\"仓库（分类卷、schema 字段、必需目录），都要有反向完整性检查，并让缺失也走 exit 1。",
+      "related": "ERR-ENV-1217（触发本条的那个事故）"
+    },
+    {
+      "id": "ERR-OPS-1218",
+      "cls": "OPS",
+      "title": "剥反引号写成「首尾各剥一次」，字段值在 md ↔ JSON 往返中静默变形 283 处",
+      "symptom": "给导出的公开仓库加了一道回读校验（写 md → 反向解析成 JSON → 与源逐字段比对），一跑就报 283 个字段变形；特征高度一致——每个都只是**丢掉值开头的那个反引号**，如 `入库: MEMORY-<name>.md\\` 第 2281 行` vs `源: \\`MEMORY-<name>.md\\` 第 2281 行`。",
+      "rawError": "✗ 回读校验：283 个字段在往返中变形（可能是反引号/换行写坏）",
+      "trigger": "字段值本身以反引号开头（行内代码），如 `- 证据: \\`MEMORY-<name>.md\\` 第 534-535 行`。",
+      "rootCause": "`const stripTick = (s) => String(s||'').replace(/^`+/,'').replace(/`+$/,'').trim()` —— 把「首」和「尾」当成两件互不相关的事各剥一次。只要值以反引号开头，第一个 replace 就把它吃掉，而它不是包装、是内容。该函数本意只是剥「作者为了好看包在外面的那一对」。",
+      "impact": "公开数据与内部源静默不一致 283 处；`--check` 全程绿色，只有新加的回读闸门能发现。修完 stripTick 后仍剩 37 处——那 37 处是内部数据自己就存成了 `` `xxx` ``（一层外包装），导出侧又原样写了一遍，被公开版再剥一次。",
+      "fix": "① 改成「只剥一对、且中间不再含反引号」才算外包装：",
+      "evidence": "`docs/error-dict/_public/scripts/build.mjs` 的 `stripTick`；`_outputs\\export-public-repo.mjs` 回读闸门段；三次运行输出：283 处 → 37 处 → `✓ 回读校验：128 条 × 10 字段无变形`",
+      "rollback": "未提交前 `git checkout -- scripts/build.mjs`；已提交则回滚该 commit（只动一个函数）",
+      "guard": "**凡是「写出去再读回来」的管线，都要有回读比对闸门**——`--check` 只验语法与必填，验不出值被悄悄改写。剥包装类操作一律要求「成对 + 内部无同类字符」，禁止对首尾各用一次正则。",
+      "related": "ERR-OPS-1217（同一轮发现，同属\"校验器给假绿灯\"）"
     },
     {
       "id": "ERR-QQ-001",
