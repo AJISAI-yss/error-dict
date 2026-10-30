@@ -3,7 +3,7 @@
 > 这一卷收「进程被带走 / 计划任务没触发 / 目录写不进 / 沙箱拒绝」这类问题。
 > 新增词条直接往下追加，骨架见 [_TEMPLATE.md](_TEMPLATE.md)。
 
-共 29 条。
+共 32 条。
 
 ## ERR-OPS-001 | 计划任务 LastTaskResult: 0 根本不能证明跑成功（WScript.Shell.Run 不解析 >>）
 
@@ -250,9 +250,9 @@
 
 ## ERR-OPS-1202 | `<workspace>/_backup` 在 workspace-write 沙箱下写入被拒，`_outputs` 可以
 
-- 症状: 在 `E:\dsh` 会话里执行 `New-Item <workspace>/_backup\<新目录>` 报 Access denied，同一时刻写 `<workspace>/_outputs\<新目录>` 正常。
+- 症状: 在 `<workspace>` 会话里执行 `New-Item <workspace>/_backup\<新目录>` 报 Access denied，同一时刻写 `<workspace>/_outputs\<新目录>` 正常。
 - 错误原文: `Access to the path '<workspace>/_backup\2026-10-25-yjapi-provider' is denied.` + `[sandbox: file access denied under workspace-write mode]`
-- 触发条件: 用 pwsh 往 `_backup` 下新建目录；workdir 在 `E:\dsh`。
+- 触发条件: 用 pwsh 往 `_backup` 下新建目录；workdir 在 `<workspace>`。
 - 根因: 未查明（已排除「工作区边界」——`_backup` 就在工作区内；`_outputs` 同层可写）。怀疑 `_backup` 目录自身 ACL 或沙箱策略对该目录有额外限制。
 - 影响: 备份脚本若默认写 `_backup` 会失败，且报错伪装成"权限问题"，容易让人以为是路径写错。
 - 解决: 临时备份先落 `_outputs\<主题>-backup-<日期>\`；需要长期保留的再手动挪进 `_backup`（或单独走一次提权写入）。
@@ -287,7 +287,7 @@
 
 ## ERR-OPS-1216 | 脱敏正则只认反斜杠：公开版依旧漏出 `C:\Users\<user>/...`
 
-- 症状: `error-dict.public.json` 号称已脱敏（反斜杠形式确实变成了 `C:\Users\<user>`），但把文件按 `E:\dsh|C:\Users|sk-` 搜一遍，仍有 9 处本机路径原样漏出。
+- 症状: `error-dict.public.json` 号称已脱敏（反斜杠形式确实变成了 `C:\Users\<user>`），但把文件按 `<workspace>|C:\Users|sk-` 搜一遍，仍有 9 处本机路径原样漏出。
 - 错误原文: `"error": "Error: Cannot find module 'C:\Users\<user>/.dsh/profiles/node_modules/js-yaml'..."`
 - 触发条件: 条目里的错误原文是从 Node 报错粘过来的 —— 而 Node 的 `Cannot find module` / `require` 路径**默认写正斜杠**。
 - 根因: 脱敏规则写成 `/C:\\Users\\[^\\\s'"]+/g`，只匹配反斜杠；`C:\Users\<user> 这种正斜杠写法整条规则压根不命中。而“部分脱敏”比“不脱敏”更危险 —— 看到几处 `<user>` 就会以为全干完了。
@@ -323,3 +323,42 @@
 - 回滚点: 未提交前 `git checkout -- scripts/build.mjs`；已提交则回滚该 commit（只动一个函数）
 - 防护: **凡是「写出去再读回来」的管线，都要有回读比对闸门**——`--check` 只验语法与必填，验不出值被悄悄改写。剥包装类操作一律要求「成对 + 内部无同类字符」，禁止对首尾各用一次正则。
 - 关联: ERR-OPS-1217（同一轮发现，同属"校验器给假绿灯"）
+
+## ERR-OPS-1219 | 屏幕上每分钟闪一次黑窗：`-WindowStyle Hidden` 不是「无窗口」
+
+- 症状: 屏幕上不断有 cmd 类型的小黑窗一闪而过，不定时、偶尔快偶尔慢、几十秒一次；进程列表里有大量 `conhost.exe` / `cmd.exe`，但用 `IsWindowVisible` 检查又说没有可见窗口。
+- 错误原文: 无报错。进程采样可见 `cmd.exe /c ""C:\path\something.bat" "`
+- 触发条件: 计划任务或自启项用 `pwsh.exe -NoProfile -WindowStyle Hidden -File xxx.ps1` 启动脚本；或把 `.bat` 路径直接交给 `WScript.Shell.Run`。
+- 根因: 两层。①`-WindowStyle Hidden` 的语义是「先创建一个控制台、再把它藏起来」，**创建那一瞬是可见的**；真正无窗口要用 ShellExecute 的 SW_HIDE（`sh.Run(cmd, 0, ...)`）或 `CREATE_NO_WINDOW`，从进程建立那一刻就没有窗口。②`sh.Run` 收到裸 `.bat` 时会由 shell 展开成 `cmd.exe /c ""path" "`，**那个 console host 是 shell 建的，传进去的 style 0 到不了它**，所以必须自己先包成 `cmd.exe /c "..."`。③`exec` 写成裸 `pwsh.exe`（不写全路径）靠 PATH 解析，在任务计划上下文里很脆。
+- 影响: 视觉干扰 + 每个任务多一个 cmd/console 进程；另外原来的 `Wait=False` 异步写法让任务永远记假 0，失败也看不出来。
+- 解决: 计划任务动作统一改成 `wscript.exe <vbs>`，vbs 里 `sh.Run("""C:\Program Files\PowerShell\7\pwsh.exe"" -File ""脚本""", 0, True)`。wscript 是 GUI 子系统宿主、不创建控制台；style 0 在创建时生效；`Wait=True` 能拿真实退出码；vbs 存 **UTF-16LE + BOM**。还要给 vbs 加 `On Error Resume Next`：`sh.Run` 一抛错，wscript 会弹「Windows Script Host」框并永久挂住，任务卡 Running 到超时，下个触发点再弹一次。
+- 证据: 用户明确说「是个 powershell 7 的」；改为 wscript 后 `EnumWindows`+`GetWindowRect` 在任务触发同时 20ms 采样，`ConsoleWindowClass` 窗口数 = 0（只认真正有尺寸的窗口）。`logs/failures/2026-10-30-0330-统一会话与静默启动.jsonl` F-2026-10-0056。
+- 回滚点: 无
+- 防护: 排查「闪窗」别靠推理哪条链路可能起窗口——直接采样窗口（按推理猜错两次，先猜计划任务、再猜某个 vbs，实测都干净）。`IsWindowVisible` 不够：`PseudoConsoleWindow`（ConPTY 的伪控制台）对它返回 true 但屏幕上不画东西，第一版检测就栽在这上面；要按窗口尺寸 / 可见矩形过滤。
+- 关联: F-2026-10-0056、ERR-OPS-1220（同一轮的另一个代价）
+
+## ERR-OPS-1220 | 每分钟起一个 PowerShell 7 = 每分钟 1 秒单核满载 + 114 MB；「会不会影响玩游戏」必须量
+
+- 症状: 用户问「瞬间读取量会不会影响玩游戏」。不量的话会答「应该没事，就是个检查端口的小脚本」。实测单次 1.4–1.7 秒、峰值 114 MB、CPU 约 1000 ms，每 60 秒一次——每 60 秒里有 2.3% 的时间在一个核心上满载，还反复分配回收 114 MB。竞技射击对帧率抖动敏感，这是能被感觉到的卡顿。
+- 错误原文: `无（不是报错，是开销）`
+- 触发条件: 计划任务每 1 分钟触发一次，动作是 `pwsh.exe -File her-state-guard.ps1`，脚本逻辑只是「探一下本机桥接端口在不在，没起就拉起服务」。**大头不是脚本逻辑，是启动 PowerShell 本身。**
+- 根因: 用重量级运行时做一件极轻的守护工作。PowerShell 7 冷启动就要 1 秒上下、100 MB 内存；任务本身只有百毫秒级逻辑时，启动开销就是全部开销。
+- 影响: 每 60 秒一次 2.3% 单核满载 + 114 MB 分配回收；在游戏 / 低延迟场景是可感知的抖动，而且会让人误以为「卡是别的原因」。
+- 解决: 同样的事用 node 重写（`net.connect` 探端口 + `spawn(detached, windowsHide)` 拉起），启动约 60 ms、常驻约 40 MB。实测 **137–150 ms / 55 MB / 47–62 ms CPU**，比原来快约 10 倍、CPU 少约 20 倍。
+- 证据: PowerShell 版三次：1742/1453/1420 ms、114.9/113.6/114.9 MB、1250/1234/984 ms CPU；node 版三次：150/137 ms、53.4/56.3 MB、47/47 ms CPU。`logs/failures/2026-10-30-0330-统一会话与静默启动.jsonl` F-2026-10-0056。
+- 回滚点: 无
+- 防护: 「定时任务开销」先分清**启动开销**和**逻辑开销**——高频短任务里，启动开销常常是全部。需要高频跑的小守护用启动快的运行时（node / 裸 exe），不要用 PowerShell。
+- 关联: F-2026-10-0056、ERR-OPS-1219（同一轮、同一个每分钟任务）
+
+## ERR-OPS-1221 | `Where-Object { $_.CommandLine -like '*关键词*' }` 匹配到正在执行这条命令的自己，然后把自己杀了
+
+- 症状: 一条「先停掉旧进程再启动新的」的命令，退出码是 `4294967295`（0xFFFFFFFF），没有任何错误信息，命令中途死掉；看起来像编码问题或进程被外部终止。
+- 错误原文: 只有 `[exit code: 4294967295]`
+- 触发条件: 用 `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*watch-console*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }` 清理自己的旧实例——**这条命令自己的 CommandLine 里就带着 `watch-console` 这个字符串**，于是它匹配到自己，`Stop-Process` 把执行它的 shell 杀了。
+- 根因: 遍历所有进程的 CommandLine 做子串匹配，会命中「正在执行当次查询的那条命令行」。同类在 `autostart-lanyin.ps1` 里 2026-10-25 就踩过一次（它把正在跑的查询命令算成了目标进程，导致「已在跑，跳过」，永远不去启动），当时留了注释说明，重写的人没看就重来了。
+- 影响: 命令静默中断、退出码怪异且不报错；如果是无人值守脚本，会表现为「脚本没跑完但没人知道」。
+- 解决: 排除自身 PID：`Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like ... }`；如果命令本身是 `pwsh -File x.ps1`，还可以再加 `-File` 之类的锚点收窄。
+- 证据: 同一条命令在加 `-ne $PID` 之后正常执行；历史同款见 `projects/qq-bridge/autostart-lanyin.ps1` 的 `Test-ProcessMatch` 注释（2026-10-25）。`logs/failures/2026-10-30-0330-统一会话与静默启动.jsonl` F-2026-10-0056（同一轮排查中遇到）。
+- 回滚点: 无
+- 防护: 任何「按命令行关键词找进程并杀掉」的脚本，第一件事就是排除自己。这类自杀最坑的地方是**它不报错**，只有一个看起来像编码问题的巨大退出码。
+- 关联: F-2026-10-0056

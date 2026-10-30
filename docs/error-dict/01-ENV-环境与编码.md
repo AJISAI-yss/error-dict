@@ -3,7 +3,7 @@
 > 这一卷收「东西没跑起来 / 中文变乱码 / 路径找不到 / 编码炸了」这类问题。
 > 新增词条直接往下追加，骨架见 [_TEMPLATE.md](_TEMPLATE.md)。
 
-共 23 条。
+共 24 条。
 
 ## ERR-ENV-001 | 中文 .ps1 丢了 UTF-8 BOM，PS 5.1 报几十处 ParseError、控制台还全是乱码
 
@@ -272,3 +272,16 @@
 - 回滚点: 无（只动了 `_outputs\` 下的临时目录与 tar 包，已删）
 - 防护: 解包后**先数文件数再跑校验**，两个数对不上就当失败；沙箱内 `git clone` 不可用属于已知边界（管道被拦），别硬试。
 - 关联: ERR-OPS-1217（同一轮暴露：文件少了，校验却报通过）
+
+## ERR-ENV-1218 | 带 CAS 的编辑工具把 CRLF 悄悄改成 LF，git diff 立刻变成全文件重写
+
+- 症状: 只改了十几行，`git diff --stat` 却显示整个文件增删（`17227 insertions(+), 15525 deletions(-)`），code review 完全没法看。
+- 错误原文: 无报错。`git diff --ignore-cr-at-eol --stat` 一看只有 2034 行真实改动。
+- 触发条件: 用 CAS 编辑工具（按 revision 校验后整文件重写那种）改一个 CRLF 行尾的文件。
+- 根因: 工具写入时把行尾归一成 LF（裸 LF 17227、CRLF 0）；仓库没配 `.gitattributes` / `core.autocrlf` 兜底，行尾一变整个文件就进 diff。这个形态和 ERR-ENV-003（`.bat` 的 LF + 非 ASCII）是同一族，只是这次破坏的是 diff 可读性，不是执行。
+- 影响: diff 从 2034 行膨胀成 32752 行，只有加 `--ignore-cr-at-eol` 才能看清真实改动；若此时直接提交，review 和 blame 全部失效。
+- 解决: 读字节 → UTF8 解码 → `-replace \r\n→\n` → `-replace \n→\r\n` → 写回（UTF8 无 BOM，原文件没有就不要加）。转完**三查**：CRLF 行数、裸 LF 行数（必须 0）、语法检查（`node --check` / PS ParseFile）。另注意 `[IO.File]::ReadAllText` 用相对路径时基准是 .NET 进程的 CWD（`<workspace>`），不是 PowerShell 的当前目录，跨目录一律给绝对路径。
+- 证据: 转换前 CRLF 0 / 裸 LF 17227 / 984262 字节；转换后 CRLF 17281 / 裸 LF 0 / 1004991 字节；`git diff --stat` 与 `--ignore-cr-at-eol` 从 32752 行收敛到同一个 2034 行。`logs/failures/2026-10-30-0330-统一会话与静默启动.jsonl` F-2026-10-0057。
+- 回滚点: 无（改动未提交前 `git checkout -- <文件>` 可回滚）
+- 防护: 改行尾敏感仓库里的文件，改完必须查一次行尾，别只看 `node --check` 过了就走。发现 diff 大得离谱时先用 `--ignore-cr-at-eol` 对比一次，立刻能区分「真改很多」和「只是行尾变了」。
+- 关联: F-2026-10-0057、ERR-ENV-003

@@ -3,7 +3,7 @@
 > 这一卷收「QQ 掉线 / 收不到消息 / 工具静默 401 / 注入没生效」这类问题。
 > 新增词条直接往下追加，骨架见 [_TEMPLATE.md](_TEMPLATE.md)。
 
-共 24 条。
+共 29 条。
 
 ## ERR-QQ-001 | 抢号：两套 NapCat 注入器互踢，机器人反复掉线报「身份验证失败 w21」
 
@@ -271,3 +271,68 @@
 - 回滚点: 无
 - 防护: **上游确认**：相对路径不合规，别在应用层"修"网关有的行为。本机规矩「发文件先落 state/ 再传绝对路径」与规范一致。视频段**上游未给出可用解**（base64 超时，规范里也没有视频专用其它编码），本机结论：视频发不出去就只发路径让人类自取，别反复试编码。
 - 关联: F-2026-10-0011
+
+## ERR-QQ-906 | 消息一条都不回、读到的 seq 卡住不动：统一会话改造后，新建的会话 7 秒就被自己杀掉
+
+- 症状: 用户连发多条消息，机器人一条都不回；读到的 seq 一直停在一个固定旧值，未读条数不减；日志每隔几十秒重复一句 `⛔ 回合被拒（blocked，模型未调用）`。第一反应是「模型调用失败」或「她故意不理人」，实际是会话建好 7 秒又被自己杀掉，陷入「建 → 杀 → 再建」死循环。
+- 错误原文: `⛔ 回合被拒（blocked，模型未调用）(private:xxxx)`；`会话权限已变化，停用旧映射 __unified__ -> session-db5ae420`
+- 触发条件: 把多个会话 key 统一到同一个 sessionId（统一上下文 / 统一人格改造），所有 key 共用 `state.sessions['__unified__']` 指针之后；凡是**遍历 `state.sessions` 并用 `sessionPolicy(key)` 做比对**的代码都会触发。
+- 根因: `__unified__` 不是 `group:<id>` / `private:<id>` 形状，`sessionPolicy('__unified__')` 算出的策略必然与建会话时（按真实 key 算）不一致，于是 `reconcileSessionPolicies()` 判定「会话权限已变化」并退役它。因为所有 key 共用这一个 session，**退役等于把所有人的会话一起杀掉**；下一轮 `ensureSession` 又建一个、再被杀。`retireSession()` 内部早就处理了统一指针，但 `reconcileSessionPolicies` 的遍历没排除它。
+- 影响: 用户侧看是「彻底失联 + 疑似赌气」，实际每轮唤醒都在 pre-step 被丢弃，模型一次都没被调用过。排查时容易被 `blocked` 日志带偏到「模型 / key 问题」。
+- 解决: 遍历时跳过统一指针：`if (key === UNIFIED_SESSION_KEY) continue;`。统一指针的权限由它指向的真实 key 决定；真实 key 不匹配时 `retireSession(key)` 会连带处理指针。同一天还有两处同类漏改：`/api/session/reset` 是手写的删除清单（没走 retireSession），也没处理统一指针，导致 reset 调了等于没做；`blocked` 分支的自动恢复计数第一版把清零放在 if 链之前，永远清零、一次都没触发过。
+- 证据: `state/bridge.log` 03:25:10 `新会话 -> session-db5ae420`，03:25:17 `会话权限已变化，停用旧映射 __unified__ -> session-db5ae420`（7 秒后自杀）；修复后 03:26:48 `工具统一发送 成功 3/3 条`。`logs/failures/2026-10-30-0330-统一会话与静默启动.jsonl` F-2026-10-0054。
+- 回滚点: _backup/bridge.js.bak-20261030-031703-before-session-reset
+- 防护: 做「N 个 key 共用一个 sessionId」这类改造时，grep 一遍所有 `state.sessions` 的遍历和所有 `sessionPolicy(` 调用——它们都还带着「一个 key 一个 sessionId」的旧假设。大改主链路之后必须再查周边（同一天的 `reset` 接口就是漏的）。判断「修好了」不看代码对不对，看自动恢复有没有真的触发过一次。
+- 关联: F-2026-10-0054
+
+## ERR-QQ-907 | 「等会儿再补」的唤醒队列只存在内存，重启就丢：人以为对方在赌气，她根本不知道有消息
+
+- 症状: 消息在服务器上、也确实触发了唤醒，但用户一直等不到回复；「未读」条数不减少；没有任何报错。真相是：她当时正在生成回复，唤醒被塞进「回合结束后再补」的队列，进程在那之前重启，队列连同唤醒一起消失。
+- 错误原文: 无（完全静默）；只有一行容易被跳过的 `[reserved2] 会话繁忙，暂存唤醒原因 <key>（原因=pendingWakeKey）`
+- 触发条件: 消息到达时对方正在生成回复（「会话繁忙」），唤醒被 put 进 `pendingWakeKeys`（纯内存 Set）；随后进程因为改代码 / 修 bug 被重启。
+- 根因: `const pendingWakeKeys = new Set()` 只在内存，所有 add/delete 都不落盘。桥接一晚上可能重启 6 次，每重启一次就丢一次，丢的时候没有任何日志。
+- 影响: 用户侧与「她赌气」不可区分；静默丢失比崩溃更难查，因为崩溃至少有栈。
+- 解决: 换成会落盘的容器。先 grep 清实际用到哪些方法（本例只有 `has/add/delete/clear` 四种），包一个最小 `PersistedWakeSet` 类，**只改声明处一行、17 个调用点不动**；构造时读回、变更时同步写 `state/pending-wakes.json`；启动日志加一条「从磁盘恢复 N 个待补唤醒」。
+- 证据: 修复后写测试 key → 重启 → `03:30:58 [唤醒队列] 重启后从磁盘恢复 1 个待补唤醒，将在 DSH 就绪后补投`；清理后再次重启，队列文件不存在、无恢复行。`logs/failures/2026-10-30-0330-统一会话与静默启动.jsonl` F-2026-10-0055。
+- 回滚点: 无（只改一行声明 + 新增一个类）
+- 防护: 凡是「等一下再补」的内存队列，都要问一句「进程重启它怎样」；答案是「丢」就是定时炸弹。恢复结果必须写进启动日志——静默恢复等于下次还是靠人肉推测。与 ERR-QQ-726（回合中重启丢防卡死租约）同族，但那条只立了「重启前查空闲」的规矩，没修队列本身。
+- 关联: F-2026-10-0055、ERR-QQ-726
+
+## ERR-QQ-908 | 「待补唤醒」队列里残留一个不在白名单的 key，补投时 `continue` 却不删除，永久占着队列
+
+- 症状: 启动日志每次都报「从磁盘恢复 N 个待补唤醒」，但补投后队列没清空，下次重启还是 N 个；队列里那条 key 永远补不出去，也不报错。
+- 错误原文: 无报错；只有启动日志 `[唤醒队列] 重启后从磁盘恢复 N 个待补唤醒`
+- 触发条件: `state/pending-wakes.json` 里存在一个不在唤醒白名单里的 key（会话被删、key 格式变更、手工写入测试 key 后忘记清理都会留下）。
+- 根因: 补投逻辑遍历队列时对「不在白名单」的 key 直接 `continue`，跳过了但不删除，于是它永远留在文件里。**已知未修**（2026-10-30 发现时队列是空的，没有实际影响，故未动）。
+- 影响: 当前无实际影响；但一旦有残留，启动日志的「恢复 N 个」会永远骗人——真丢的队列和残留的 key 看起来一样。
+- 解决: 暂无（已知未修）。修法方向：`continue` 分支同时删除，或在标记次数超过阈值后丢弃并记一行日志。
+- 证据: `state/pending-wakes.json` 的补投逻辑（`PersistedWakeSet` 落地之后的下一段）；2026-10-30 发现时文件不存在（队列为空）。`_handoff/通用/2026-10-30-报错词条素材-统一会话与静默启动.md` 注意事项段。
+- 回滚点: 无
+- 防护: 队列类持久化，除了「恢复」还要检查「清理」——任何 `continue` / `skip` 分支都要问一句「这条还会不会回来」。
+- 关联: ERR-QQ-907（同一个队列的落地改造）
+
+## ERR-QQ-909 | 重置会话之后她不说话、唤醒接口还返回 ok:true：bootstrap 被上一个会话留下的「系统类冷却」静默吞掉
+
+- 症状: 重置会话之后她不说话。日志里只有一行 `系统类唤醒冷却中，跳过`，没有报错、没有重试、没有延后；唤醒接口返回 `{ok:true}`，人和运维都以为叫醒成功了。搜「重置会话后不回」「唤醒返回 ok 但人没醒」「bootstrap 被冷却」「冷却中，跳过」都会撞到这一条。
+- 错误原文: `[reserved2] 系统类唤醒冷却中，跳过 private:<qq-uin>（bootstrap，距上次 89s）`
+- 触发条件: reserved2 模式；会话刚被 `retireSession` 退役重建（换页 / 重置 / 权限变化 / DSH 侧 not-found）；上一个会话在 10 分钟内发生过 `timeout` / `replyCheck` / `proactiveCheck` 唤醒；新会话收到的第一条消息触发 `bootstrap`（会话首次唤醒，要注入初始提示词和二代协议）。
+- 根因: 三处叠加。①`bootstrap` 在 `TIMER_WAKE_REASONS` 集合里，于是被当成「系统自己找上门的唤醒」受 10 分钟冷却；但它是会话首次唤醒，天然一个会话只发生一次，冷却对它没有意义、只有害处。②`retireSession` 复位了 agentToken / bootstrapSent / modelSeenSeqs，却没复位 `lastTimerWakeAt` / `wakeTimes` —— 刚退役重建的新会话，第一次唤醒就撞上上一个会话留下的冷却时间戳。③冷却分支是直接 `return`（不排重试），所以被吞掉是无声的，调用方还拿到成功。
+- 影响: 这一轮唤醒彻底消失，用户侧表现为「重置之后她不理人」；而接口回了 `{ok:true}`，属于**谎报成功**，比报错更难排查——排查者会先怀疑模型、再怀疑会话，最后才怀疑冷却。
+- 解决: ①新增 `WAKE_COOLDOWN_EXEMPT_REASONS = ['bootstrap','admin']` 与 `isWakeCooldownExempt()`；`timerLikeWake = isTimerWakeReason(reason) && !isWakeCooldownExempt(reason)`。②只有 `timerLikeWake` 才写 `lastTimerWakeAt`，否则被豁免的唤醒会反过来吞掉之后的 timeout（见 ERR-QQ-910）。③`retireSession` 里补复位 `lastTimerWakeAt = 0`、`wakeTimes = []`、`wakeConfig.lastWakeAt = 0`、`lastWakeReason = ''`（`wakeCount` 有意保留，那是统计不是约束）。④**不要**从 `TIMER_WAKE_REASONS` 里删 `bootstrap` / `admin`——那个集合还决定「重试 / 补发要不要用未读水位判断」，删了会让 bootstrap 的补发被静默跳过。`timeout` / `replyCheck` / `proactiveCheck` 仍受冷却。
+- 证据: 2026-10-30 03:23:45 真实日志（错误原文那段）`state/bridge.log`；改动前 `bridge.js` 17504 行 / 1019019 字节，改后 17532 行 / 1021371 字节，`git diff --stat` 31 insertions(+) / 3 deletions(-)，`node --check` 通过，裸 LF = 0（LF 行数 = CRLF 行数，CAS 工具剥掉的 `\r` 已补回）；自测 `_workspace/selftest-bootstrap-cooldown-20261030.mjs` 从源码原样截取 4 段在 vm 里跑，8 种情形全过（bootstrap / admin 89s 放行；replyCheck / timeout / proactiveCheck 89s 仍拦截；>10 分钟放行）。`logs/failures/2026-10-30-0400-bootstrap冷却吞唤醒.jsonl` F-2026-10-0058。
+- 回滚点: _backup/bridge.js.bak-20261030-035841-before-bootstrap-cooldown
+- 防护: 判断「这个 reason 要不要进限流集合」时先问：它是**周期性**动作还是**一次性**动作？把一次性语义塞进周期性限流集合，一定会在重建 / 重置的边界上爆炸。会话退役 = 状态机归零：所有属于上一代会话的记账（时间戳 / 滑动窗口 / 上次原因）必须一起清，只清 token 是不完整的复位。限流分支 `return` 前还要想清楚：被丢掉之后还有没有人会再叫一次？没有，就等于永久丢。
+- 关联: F-2026-10-0058、ERR-QQ-910（同一次改动的另一半）、ERR-QQ-906（会话退役相关）
+
+## ERR-QQ-910 | 手动叫醒她一次，后面 10 分钟定时唤醒全不动：admin 唤醒也会写「系统类冷却」基线
+
+- 症状: 手动叫醒一次之后，接下来十分钟定时唤醒（timeout / replyCheck / proactiveCheck）全都不动，日志只有 `系统类唤醒冷却中，跳过 ...（timeout，距上次 <600s）`。表现为「叫她一次之后她反而更安静了」。
+- 错误原文: `[reserved2] 系统类唤醒冷却中，跳过 private:<qq-uin>（timeout，距上次 89s）`
+- 触发条件: `admin` 唤醒（手动叫醒 / 管理员触发）之后 10 分钟内，任何 timeout / replyCheck / proactiveCheck 唤醒到达。
+- 根因: `admin` 虽然被豁免了冷却判断，但**写冷却基线那一行**用的是 `isTimerWakeReason(reason)`，而 `admin` 就在 `TIMER_WAKE_REASONS` 里 —— 于是手动唤醒顺手把 `lastTimerWakeAt` 写成了现在，等于给后续所有 timeout 上了一次 10 分钟冷却。「豁免判断」和「记账」是两件事，代码里被写成了同一件事。
+- 影响: 手动唤醒越频繁，定时唤醒被吞得越多；症状与「冷却坏了」相反（不是拦自己，是拦别人），所以很容易误判成「定时器没跑」。
+- 解决: 与 ERR-QQ-909 同一次改动：把写基线那行从 `if (isTimerWakeReason(reason))` 改成 `if (timerLikeWake)`，其中 `timerLikeWake = isTimerWakeReason(reason) && !isWakeCooldownExempt(reason)`（豁免名单 = `bootstrap` / `admin`）。改完后 admin / bootstrap 不写基线，也不再吞后续 timeout。
+- 证据: 同 ERR-QQ-909 的 diff（34 行里含此处）与自测 `_workspace/selftest-bootstrap-cooldown-20261030.mjs`（8 种情形覆盖：admin 89s 放行且不写基线、timeout 89s 仍拦截）。`logs/failures/2026-10-30-0400-bootstrap冷却吞唤醒.jsonl` F-2026-10-0058；同型历史：2026-10-22 15:17 `admin` 唤醒也曾被这 10 分钟冷却拦过。
+- 回滚点: _backup/bridge.js.bak-20261030-035841-before-bootstrap-cooldown
+- 防护: 豁免冷却 ≠ 可以写冷却基线。「豁免」只回答「要不要拦」，不回答「要不要记账」——这两件事必须分开写，否则豁免路径会从「不拦自己」变成「拦别人」。
+- 关联: F-2026-10-0058、ERR-QQ-909（同一次改动的主条目）

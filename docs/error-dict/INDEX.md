@@ -2,7 +2,7 @@
 
 > 自动生成，请勿手改。找错误时先在这里搜关键词。
 
-共 131 条，关键词 68 个。
+共 140 条，关键词 70 个。
 
 | 关键词 | 条目 | 标题 |
 |---|---|---|
@@ -48,6 +48,9 @@
 | `（无关键词）` | ERR-OPS-1216 | 脱敏正则只认反斜杠：公开版依旧漏出 `C:\Users\<user>/...` |
 | `（无关键词）` | ERR-OPS-1217 | 校验器只验「现有的对不对」，仓库缺了一半照样报 ✓ 通过 |
 | `（无关键词）` | ERR-OPS-1218 | 剥反引号写成「首尾各剥一次」，字段值在 md ↔ JSON 往返中静默变形 283 处 |
+| `（无关键词）` | ERR-OPS-1219 | 屏幕上每分钟闪一次黑窗：`-WindowStyle Hidden` 不是「无窗口」 |
+| `（无关键词）` | ERR-OPS-1220 | 每分钟起一个 PowerShell 7 = 每分钟 1 秒单核满载 + 114 MB；「会不会影响玩游戏」必须量 |
+| `（无关键词）` | ERR-OPS-1221 | `Where-Object { $_.CommandLine -like '*关键词*' }` 匹配到正在执行这条命令的自己，然后把自己杀了 |
 | `（无关键词）` | ERR-OPS-841 | 失败日志 ID 写成 F-2026-10-23-0010（多一段日期），按 F-04 只追加标注 |
 | `（无关键词）` | ERR-OPS-843 | 取样瞬时导致误报 NapCat 掉线：把「某一刻没在听」当成「服务挂了」 |
 | `（无关键词）` | ERR-OPS-845 | journey-sampler 计划任务写成 LogonTrigger，描述却写 every 20min，21.5 小时没触发 |
@@ -72,6 +75,10 @@
 | `（无关键词）` | ERR-QQ-730 | 抢号检查判据把用户主号当抢号，每天一条假 FAIL |
 | `（无关键词）` | ERR-QQ-732 | 改代码只跑语法检查不跑功能：漏 export、调用未实现、编辑吃掉一行都能过 |
 | `（无关键词）` | ERR-QQ-904 | NapCat 被腾讯踢下线：KickedOffLine + 身份验证失败 w21，频繁重启只会越救越死 |
+| `（无关键词）` | ERR-QQ-906 | 消息一条都不回、读到的 seq 卡住不动：统一会话改造后，新建的会话 7 秒就被自己杀掉 |
+| `（无关键词）` | ERR-QQ-908 | 「待补唤醒」队列里残留一个不在白名单的 key，补投时 `continue` 却不删除，永久占着队列 |
+| `（无关键词）` | ERR-QQ-909 | 重置会话之后她不说话、唤醒接口还返回 ok:true：bootstrap 被上一个会话留下的「系统类冷却」静默吞掉 |
+| `（无关键词）` | ERR-QQ-910 | 手动叫醒她一次，后面 10 分钟定时唤醒全不动：admin 唤醒也会写「系统类冷却」基线 |
 | `0x8009030e` | ERR-NET-901 | 沙箱内 curl / PowerShell 走 Schannel 全报 SEC_E_NO_CREDENTIALS，同 URL 的 Node / Python 却全通 |
 | `0xC0000005` | ERR-MEDIA-782 | Wan2.2 VAE 解码在 gfx1031 上 HIP 崩溃：文生视频跑通、图生视频 13 分钟内崩 |
 | `400` | ERR-DSH-008 | thinking 历史冲突 400：同一会话中途改过 reasoningEffort |
@@ -98,9 +105,11 @@
 | `BIOS` | ERR-ENV-308 | Docker Desktop 装了但引擎起不来：WSL2 没装 + BIOS 虚拟化是关的 |
 | `BOM` | ERR-ENV-001 | 中文 .ps1 丢了 UTF-8 BOM，PS 5.1 报几十处 ParseError、控制台还全是乱码 |
 | `BOM` | ERR-ENV-902 | 含中文的 .ps1 存成 UTF-8 无 BOM，powershell.exe 5.1 按 ANSI 解码 → ParseError / "字符串缺少终止符" |
+| `CAS` | ERR-ENV-1218 | 带 CAS 的编辑工具把 CRLF 悄悄改成 LF，git diff 立刻变成全文件重写 |
 | `CDN` | ERR-MEDIA-003 | 收藏表情取不到图：市场 CDN 的 gif/png 全部 404，真实地址在 p.qpic.cn |
 | `CIM` | ERR-OPS-003 | restart.bat 用 echo. \| 喂 stdin → CIM 查询全部拒绝访问，旧进程没杀掉、锁文件却删了 |
 | `CRLF` | ERR-ENV-004 | ops_edit_file 改 CRLF 大文件：用 \n 拼的多行 oldText 一律 EDIT_CONFLICT |
+| `CRLF` | ERR-ENV-1218 | 带 CAS 的编辑工具把 CRLF 悄悄改成 LF，git diff 立刻变成全文件重写 |
 | `DACL` | ERR-ENV-007 | 沙箱 DACL 缺 AD 权限 / 0o700 目录：7z 增量解压 Access Denied、mkdtemp 与 pip 全挂 |
 | `DSH` | ERR-DSH-663 | preset "qq-chat-v2" 不在 DSH 可用清单，群/私聊能收不能回 |
 | `DSH` | ERR-ENV-305 | 子进程（node/python/curl）写 projects\local-video 一律 EPERM，同一时刻 DSH 原生文件工具却能写 |
@@ -142,6 +151,7 @@
 | `PackageOverlayNotFoundError` | ERR-DSH-908 | PackageOverlayNotFoundError: cannot resolve package —— node_modules 里的 junction 指向 profile 之外，被 overlay 校验整批拒载 |
 | `PARSE` | ERR-ENV-902 | 含中文的 .ps1 存成 UTF-8 无 BOM，powershell.exe 5.1 按 ANSI 解码 → ParseError / "字符串缺少终止符" |
 | `ParseError` | ERR-ENV-001 | 中文 .ps1 丢了 UTF-8 BOM，PS 5.1 报几十处 ParseError、控制台还全是乱码 |
+| `pendingWakeKey` | ERR-QQ-907 | 「等会儿再补」的唤醒队列只存在内存，重启就丢：人以为对方在赌气，她根本不知道有消息 |
 | `PermissionError` | ERR-ENV-307 | MIOpen 调优缓存写不进沙箱外目录，训练脚本一跑就 miopenStatusInternalError |
 | `PLUGIN` | ERR-DY-801 | 抖音评论采集链路失效：签名器路径写死 + SDK 缺失 + 输出协议不兼容 |
 | `PNG` | ERR-MEDIA-005 | 腾讯图片 URL 几十秒就过期；QQ 给的扩展名还会撒谎（.png 实际是 GIF89a） |
