@@ -2,7 +2,7 @@
 
 > 自动生成，请勿手改。找错误时先在这里搜关键词。
 
-共 140 条，关键词 70 个。
+共 144 条，关键词 71 个。
 
 | 关键词 | 条目 | 标题 |
 |---|---|---|
@@ -51,6 +51,8 @@
 | `（无关键词）` | ERR-OPS-1219 | 屏幕上每分钟闪一次黑窗：`-WindowStyle Hidden` 不是「无窗口」 |
 | `（无关键词）` | ERR-OPS-1220 | 每分钟起一个 PowerShell 7 = 每分钟 1 秒单核满载 + 114 MB；「会不会影响玩游戏」必须量 |
 | `（无关键词）` | ERR-OPS-1221 | `Where-Object { $_.CommandLine -like '*关键词*' }` 匹配到正在执行这条命令的自己，然后把自己杀了 |
+| `（无关键词）` | ERR-OPS-1222 | 机器人说「看不了这张」其实一次都没看过 —— 脚本文件早就没了 |
+| `（无关键词）` | ERR-OPS-1224 | 装新插件报 tool "xxx" is already registered —— 旧插件的工具还活在内存里 |
 | `（无关键词）` | ERR-OPS-841 | 失败日志 ID 写成 F-2026-10-23-0010（多一段日期），按 F-04 只追加标注 |
 | `（无关键词）` | ERR-OPS-843 | 取样瞬时导致误报 NapCat 掉线：把「某一刻没在听」当成「服务挂了」 |
 | `（无关键词）` | ERR-OPS-845 | journey-sampler 计划任务写成 LogonTrigger，描述却写 every 20min，21.5 小时没触发 |
@@ -152,7 +154,9 @@
 | `PARSE` | ERR-ENV-902 | 含中文的 .ps1 存成 UTF-8 无 BOM，powershell.exe 5.1 按 ANSI 解码 → ParseError / "字符串缺少终止符" |
 | `ParseError` | ERR-ENV-001 | 中文 .ps1 丢了 UTF-8 BOM，PS 5.1 报几十处 ParseError、控制台还全是乱码 |
 | `pendingWakeKey` | ERR-QQ-907 | 「等会儿再补」的唤醒队列只存在内存，重启就丢：人以为对方在赌气，她根本不知道有消息 |
+| `PermissionError` | ERR-DSH-1214 | huggingface 下模型报 PermissionError WinError 5（目录明明可写） |
 | `PermissionError` | ERR-ENV-307 | MIOpen 调优缓存写不进沙箱外目录，训练脚本一跑就 miopenStatusInternalError |
+| `PLACE_HOUSE` | ERR-OPS-1223 | 用脚本改代码只插了调用没插定义 —— 进小屋 / 出小屋每次必报错 |
 | `PLUGIN` | ERR-DY-801 | 抖音评论采集链路失效：签名器路径写死 + SDK 缺失 + 输出协议不兼容 |
 | `PNG` | ERR-MEDIA-005 | 腾讯图片 URL 几十秒就过期；QQ 给的扩展名还会撒谎（.png 实际是 GIF89a） |
 | `PROVIDER_SETUP` | ERR-DSH-1210 | 前端 `Identifier 'PROVIDER_SETUP' has already been declared`，同一段脚本被求值两次 |
@@ -161,6 +165,7 @@
 | `PT10M` | ERR-OPS-847 | watchdog 单轮实测 7.4–9.6 分钟贴 PT10M 上限，超时被强杀则 L3 告警彻底静默 |
 | `PTC` | ERR-DSH-667 | 进程级切 PTC 后全部有历史的会话永久 400：唯一工具被标 deferLoading |
 | `PYTHONUTF8` | ERR-ENV-010 | Python 中文输出编码三连：rich emoji 崩、表格乱码、invalid PYTHONUTF8 |
+| `ReferenceError` | ERR-OPS-1223 | 用脚本改代码只插了调用没插定义 —— 进小屋 / 出小屋每次必报错 |
 | `ReferenceError` | ERR-QQ-014 | 桥接里的 JS 引用错误三连：TDZ / 局部变量误用 / 可调用对象当对象用 |
 | `scopeOfKey` | ERR-QQ-728 | 长期记忆只分 private/shared，群与群之间串权（A 群秘密会漏到 B 群） |
 | `SDK` | ERR-DY-801 | 抖音评论采集链路失效：签名器路径写死 + SDK 缺失 + 输出协议不兼容 |

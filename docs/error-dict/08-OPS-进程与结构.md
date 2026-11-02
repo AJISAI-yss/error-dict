@@ -3,7 +3,7 @@
 > 这一卷收「进程被带走 / 计划任务没触发 / 目录写不进 / 沙箱拒绝」这类问题。
 > 新增词条直接往下追加，骨架见 [_TEMPLATE.md](_TEMPLATE.md)。
 
-共 32 条。
+共 35 条。
 
 ## ERR-OPS-001 | 计划任务 LastTaskResult: 0 根本不能证明跑成功（WScript.Shell.Run 不解析 >>）
 
@@ -362,3 +362,42 @@
 - 回滚点: 无
 - 防护: 任何「按命令行关键词找进程并杀掉」的脚本，第一件事就是排除自己。这类自杀最坑的地方是**它不报错**，只有一个看起来像编码问题的巨大退出码。
 - 关联: F-2026-10-0056
+
+## ERR-OPS-1222 | 机器人说「看不了这张」其实一次都没看过 —— 脚本文件早就没了
+
+- 症状: `look` / `gaze` / `done` / `eye_state` 四个工具每次都回「看不了这张。」「看不清那一块。」「现在没在看什么。」，不报错不抛异常，日志里一条 eye 相关记录都没有。搜索关键词：看不了这张 / 看不清那一块 / 现在没在看什么
+- 错误原文: `Error: Cannot find module '<workspace>/scripts\eye.mjs'`；工具层只看到 `spawnSync` 的 `status=1` 与空 stdout
+- 触发条件: 任何一次调用都必然失败（100%）。根因是文件不存在，与输入无关
+- 根因: `src/eye-tools.js:27` 写死 `const EYE = '<workspace>/scripts/eye.mjs'`，该文件已不存在，全盘无副本，`_backup`/`_archive` 也没有。`scripts/` 在根仓库只跟踪 53 个文件，`eye.mjs` **从未提交**，`git checkout` 救不回来。空 stdout 被 `parse()` 吞成 null，于是工具层把"没执行"翻译成了"看不了"
+- 影响: 她的视觉类工具静默失效，但对外表现为"看过了，看不清"——比直接报错更糟，因为它会让人以为功能正常
+- 解决: ① 先判定是「被删」还是「某次验证记录不可靠」；② 找回或按原设计重写；③ 过渡期在 `run()` 里加 `fs.existsSync(EYE)` 守卫，明确报「眼睛的脚本不见了」
+- 证据: `logs/failures/2026-10-30-0420-死代码扫描.jsonl` F-2026-10-0068；`_handoff/通用/2026-10-30-夜间自主推进-T1死代码扫描.md` 第一张表第 1 行；`src/mcp-snowluma-safe.js:2626` 证明确实注册了工具
+- 回滚点: **没有**。文件不在 git、不在 `_backup` —— 这正是本条最该被记住的地方
+- 防护: ① 每天要用的工具所依赖的脚本必须提交进 git 或进 `_backup`；② 任何 `spawnSync` 包装器先查 `status` 和目标文件存在性，再解释输出；③ 失败日志里写「已验证 ok:true」必须同时记下验证命令和被验证文件的 hash
+- 关联: ERR-OPS-1223
+
+## ERR-OPS-1223 | 用脚本改代码只插了调用没插定义 —— 进小屋 / 出小屋每次必报错
+
+- 症状: `house_enter` / `house_leave` 每次调用都返回错误，拿不到小屋描述；`bridge.log` 里没有对应报错行。搜索关键词：house_enter 报错 / 进小屋失败 / setPlace is not defined
+- 错误原文: `ReferenceError: setPlace is not defined`（同类还有 `PLACE_HOUSE is not defined`）
+- 触发条件: 每一次 `house_enter` / `house_leave` 调用（100%）。触发点在 `loadHouse()` 成功之后、`return ok(...)` 之前
+- 根因: 有人用 `_outputs/_fix_place.mjs` 把 `setPlace(PLACE_HOUSE, ...)` 插进 `src/house-tools.js:86` 与 `:114`，但**那个脚本只插调用、没插定义**。三个符号的正身分别在别处，`house-tools.js` 既没 import 也没本地定义
+- 影响: 工具注册成功、调用必失败，且错误不进 `bridge.log`（走 MCP 通道），排查时容易以为是数据问题
+- 解决: 在 `house-tools.js` 顶部补 `const PLACE_HOUSE` / `const PLACE_GROUND` 与 `setPlace()` 定义；或改成 import 已有的导出
+- 证据: `logs/failures/2026-10-30-0420-死代码扫描.jsonl` F-2026-10-0069；未定义引用位置由 acorn AST + 作用域链扫描得出
+- 回滚点: `_backup/tool-fold-20261030/` 不含本文件；改动前版本可看 `_outputs/_fix_place.mjs` 的插入锚点
+- 防护: 用脚本改代码时，脚本必须**同时产出「定义 + 调用」**，只插调用等于留一颗定时炸弹；改完立刻跑一次未定义检查（`node --check` 查不出这类问题）
+- 关联: ERR-OPS-1222（同一类：标识符/文件不存在）
+
+## ERR-OPS-1224 | 装新插件报 tool "xxx" is already registered —— 旧插件的工具还活在内存里
+
+- 症状: `plugin_manager install_bundle` 显示装成功但 `application: failed`，diagnostic 说某个 tool 名已被注册。搜索关键词：already registered / 装插件失败 / 工具名冲突
+- 错误原文: `tool "douyin_status" is already registered`
+- 触发条件: 新旧插件注册了同名工具（本例：旧 `dsh-douyin-scroll` 与新 `dsh-douyin-browser-local` 都有 `douyin_status`）
+- 根因: `set_bundle enabled=false` 只是从 bundles 列表里移掉，**旧插件的工具注册还活在当前 DSH 进程的内存里**；不重启进程，名字不会释放
+- 影响: 新插件装不上，且"安装成功"的提示会误导人以为已经好了
+- 解决: 禁旧插件 → **重启 DSH** → 新插件才能激活
+- 证据: `logs/failures/2026-10-31-0115-抖音换插件与器官接入.jsonl` F-2026-10-0078
+- 回滚点: 插件配置在 `cordis.patch.yml`，改动前先备份
+- 防护: 换插件前先 grep 两个包的工具名，重叠的先算进「必须重启」的代价里
+- 关联: ERR-DSH-1214

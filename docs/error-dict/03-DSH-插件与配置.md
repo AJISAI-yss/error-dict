@@ -3,7 +3,7 @@
 > 这一卷收「插件没加载 / 配置没生效 / 模型报 400 / provider 注册失败」这类问题。
 > 新增词条直接往下追加，骨架见 [_TEMPLATE.md](_TEMPLATE.md)。
 
-共 24 条。
+共 25 条。
 
 ## ERR-DSH-001 | 坏插件拖垮整个工具树：命令「假执行」，空输出 + exit 0 + 无副作用
 
@@ -303,3 +303,16 @@
 - 回滚点: _outputs/yjapi-provider-backup-20261025/cordis.patch.before-off-fix.yml
 - 防护: 新接任何中转 provider，先跑一遍「不传 / 逐档」探测再写 reasoningEfforts；不要把字面量 `'off'` 当成「不发」。
 - 关联: ERR-NET-1201（同一轮接入时发现的验证通道问题）
+
+## ERR-DSH-1214 | huggingface 下模型报 PermissionError WinError 5（目录明明可写）
+
+- 症状: `setup_local.py --download-model tiny` 报 `PermissionError: [WinError 5] 拒绝访问`，路径在 `.../.models/models--Systran--faster-whisper-tiny`。反直觉点：同一个目录，PowerShell `New-Item` 能建、Python `os.makedirs` 不能。搜索关键词：WinError 5 / PermissionError / huggingface / 拒绝访问 但目录可写
+- 错误原文: `PermissionError: [WinError 5] 拒绝访问。: '...\\.models\\models--Systran--faster-whisper-tiny'`
+- 触发条件: Windows 上 `huggingface_hub` 下载完成后建符号链接；非管理员且未开启开发者模式；模型目录位于 `node_modules` 下
+- 根因: ① 建 symlink 需要特权，Windows 默认不允许；② 路径在 `node_modules` 下时嵌套目录另有权限问题
+- 影响: 本地模型装不上，Whisper 类功能全部不可用
+- 解决: ① `$env:HF_HUB_DISABLE_SYMLINKS = '1'`；② 手动预建目录树；③ 用 junction 把模型缓存移出 `node_modules`；④ 必要时从镜像直下文件到 `snapshots/<commit>/`
+- 证据: `logs/failures/2026-10-31-0115-抖音换插件与器官接入.jsonl` F-2026-10-0078
+- 回滚点: 模型目录可整体删除重建，无状态损失
+- 防护: Windows 上装任何 HF 系模型，**先设 `HF_HUB_DISABLE_SYMLINKS=1`**，模型别放 `node_modules`
+- 关联: ERR-DSH-1214（同类：Windows 权限）

@@ -3,15 +3,15 @@
   "license": "CC-BY-4.0",
   "generatedAt": "2026-11-02",
   "note": "本文件由 scripts/build.mjs 从 docs/error-dict/0x-*.md 生成，请勿手改。源文件是 markdown。",
-  "count": 140,
+  "count": 144,
   "byClass": {
     "COST": 4,
-    "DSH": 24,
+    "DSH": 25,
     "DY": 6,
     "ENV": 24,
     "MEDIA": 16,
     "NET": 5,
-    "OPS": 32,
+    "OPS": 35,
     "QQ": 29
   },
   "entries": [
@@ -392,6 +392,21 @@
       "rollback": "_outputs/yjapi-provider-backup-20261025/cordis.patch.before-off-fix.yml",
       "guard": "新接任何中转 provider，先跑一遍「不传 / 逐档」探测再写 reasoningEfforts；不要把字面量 `'off'` 当成「不发」。",
       "related": "ERR-NET-1201（同一轮接入时发现的验证通道问题）"
+    },
+    {
+      "id": "ERR-DSH-1214",
+      "cls": "DSH",
+      "title": "huggingface 下模型报 PermissionError WinError 5（目录明明可写）",
+      "symptom": "`setup_local.py --download-model tiny` 报 `PermissionError: [WinError 5] 拒绝访问`，路径在 `.../.models/models--Systran--faster-whisper-tiny`。反直觉点：同一个目录，PowerShell `New-Item` 能建、Python `os.makedirs` 不能。搜索关键词：WinError 5 / PermissionError / huggingface / 拒绝访问 但目录可写",
+      "rawError": "PermissionError: [WinError 5] 拒绝访问。: '...\\\\.models\\\\models--Systran--faster-whisper-tiny'",
+      "trigger": "Windows 上 `huggingface_hub` 下载完成后建符号链接；非管理员且未开启开发者模式；模型目录位于 `node_modules` 下",
+      "rootCause": "① 建 symlink 需要特权，Windows 默认不允许；② 路径在 `node_modules` 下时嵌套目录另有权限问题",
+      "impact": "本地模型装不上，Whisper 类功能全部不可用",
+      "fix": "① `$env:HF_HUB_DISABLE_SYMLINKS = '1'`；② 手动预建目录树；③ 用 junction 把模型缓存移出 `node_modules`；④ 必要时从镜像直下文件到 `snapshots/<commit>/`",
+      "evidence": "`logs/failures/2026-10-31-0115-抖音换插件与器官接入.jsonl` F-2026-10-0078",
+      "rollback": "模型目录可整体删除重建，无状态损失",
+      "guard": "Windows 上装任何 HF 系模型，**先设 `HF_HUB_DISABLE_SYMLINKS=1`**，模型别放 `node_modules`",
+      "related": "ERR-DSH-1214（同类：Windows 权限）"
     },
     {
       "id": "ERR-DY-001",
@@ -1467,6 +1482,51 @@
       "rollback": "无",
       "guard": "任何「按命令行关键词找进程并杀掉」的脚本，第一件事就是排除自己。这类自杀最坑的地方是**它不报错**，只有一个看起来像编码问题的巨大退出码。",
       "related": "F-2026-10-0056"
+    },
+    {
+      "id": "ERR-OPS-1222",
+      "cls": "OPS",
+      "title": "机器人说「看不了这张」其实一次都没看过 —— 脚本文件早就没了",
+      "symptom": "`look` / `gaze` / `done` / `eye_state` 四个工具每次都回「看不了这张。」「看不清那一块。」「现在没在看什么。」，不报错不抛异常，日志里一条 eye 相关记录都没有。搜索关键词：看不了这张 / 看不清那一块 / 现在没在看什么",
+      "rawError": "`Error: Cannot find module '<workspace>/scripts\\eye.mjs'`；工具层只看到 `spawnSync` 的 `status=1` 与空 stdout",
+      "trigger": "任何一次调用都必然失败（100%）。根因是文件不存在，与输入无关",
+      "rootCause": "`src/eye-tools.js:27` 写死 `const EYE = '<workspace>/scripts/eye.mjs'`，该文件已不存在，全盘无副本，`_backup`/`_archive` 也没有。`scripts/` 在根仓库只跟踪 53 个文件，`eye.mjs` **从未提交**，`git checkout` 救不回来。空 stdout 被 `parse()` 吞成 null，于是工具层把\"没执行\"翻译成了\"看不了\"",
+      "impact": "她的视觉类工具静默失效，但对外表现为\"看过了，看不清\"——比直接报错更糟，因为它会让人以为功能正常",
+      "fix": "① 先判定是「被删」还是「某次验证记录不可靠」；② 找回或按原设计重写；③ 过渡期在 `run()` 里加 `fs.existsSync(EYE)` 守卫，明确报「眼睛的脚本不见了」",
+      "evidence": "`logs/failures/2026-10-30-0420-死代码扫描.jsonl` F-2026-10-0068；`_handoff/通用/2026-10-30-夜间自主推进-T1死代码扫描.md` 第一张表第 1 行；`src/mcp-snowluma-safe.js:2626` 证明确实注册了工具",
+      "rollback": "**没有**。文件不在 git、不在 `_backup` —— 这正是本条最该被记住的地方",
+      "guard": "① 每天要用的工具所依赖的脚本必须提交进 git 或进 `_backup`；② 任何 `spawnSync` 包装器先查 `status` 和目标文件存在性，再解释输出；③ 失败日志里写「已验证 ok:true」必须同时记下验证命令和被验证文件的 hash",
+      "related": "ERR-OPS-1223"
+    },
+    {
+      "id": "ERR-OPS-1223",
+      "cls": "OPS",
+      "title": "用脚本改代码只插了调用没插定义 —— 进小屋 / 出小屋每次必报错",
+      "symptom": "`house_enter` / `house_leave` 每次调用都返回错误，拿不到小屋描述；`bridge.log` 里没有对应报错行。搜索关键词：house_enter 报错 / 进小屋失败 / setPlace is not defined",
+      "rawError": "`ReferenceError: setPlace is not defined`（同类还有 `PLACE_HOUSE is not defined`）",
+      "trigger": "每一次 `house_enter` / `house_leave` 调用（100%）。触发点在 `loadHouse()` 成功之后、`return ok(...)` 之前",
+      "rootCause": "有人用 `_outputs/_fix_place.mjs` 把 `setPlace(PLACE_HOUSE, ...)` 插进 `src/house-tools.js:86` 与 `:114`，但**那个脚本只插调用、没插定义**。三个符号的正身分别在别处，`house-tools.js` 既没 import 也没本地定义",
+      "impact": "工具注册成功、调用必失败，且错误不进 `bridge.log`（走 MCP 通道），排查时容易以为是数据问题",
+      "fix": "在 `house-tools.js` 顶部补 `const PLACE_HOUSE` / `const PLACE_GROUND` 与 `setPlace()` 定义；或改成 import 已有的导出",
+      "evidence": "`logs/failures/2026-10-30-0420-死代码扫描.jsonl` F-2026-10-0069；未定义引用位置由 acorn AST + 作用域链扫描得出",
+      "rollback": "`_backup/tool-fold-20261030/` 不含本文件；改动前版本可看 `_outputs/_fix_place.mjs` 的插入锚点",
+      "guard": "用脚本改代码时，脚本必须**同时产出「定义 + 调用」**，只插调用等于留一颗定时炸弹；改完立刻跑一次未定义检查（`node --check` 查不出这类问题）",
+      "related": "ERR-OPS-1222（同一类：标识符/文件不存在）"
+    },
+    {
+      "id": "ERR-OPS-1224",
+      "cls": "OPS",
+      "title": "装新插件报 tool \"xxx\" is already registered —— 旧插件的工具还活在内存里",
+      "symptom": "`plugin_manager install_bundle` 显示装成功但 `application: failed`，diagnostic 说某个 tool 名已被注册。搜索关键词：already registered / 装插件失败 / 工具名冲突",
+      "rawError": "tool \"douyin_status\" is already registered",
+      "trigger": "新旧插件注册了同名工具（本例：旧 `dsh-douyin-scroll` 与新 `dsh-douyin-browser-local` 都有 `douyin_status`）",
+      "rootCause": "`set_bundle enabled=false` 只是从 bundles 列表里移掉，**旧插件的工具注册还活在当前 DSH 进程的内存里**；不重启进程，名字不会释放",
+      "impact": "新插件装不上，且\"安装成功\"的提示会误导人以为已经好了",
+      "fix": "禁旧插件 → **重启 DSH** → 新插件才能激活",
+      "evidence": "`logs/failures/2026-10-31-0115-抖音换插件与器官接入.jsonl` F-2026-10-0078",
+      "rollback": "插件配置在 `cordis.patch.yml`，改动前先备份",
+      "guard": "换插件前先 grep 两个包的工具名，重叠的先算进「必须重启」的代价里",
+      "related": "ERR-DSH-1214"
     },
     {
       "id": "ERR-QQ-001",
