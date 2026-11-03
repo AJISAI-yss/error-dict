@@ -2,7 +2,7 @@
 
 > 自动生成，请勿手改。找错误时先在这里搜关键词。
 
-共 144 条，关键词 71 个。
+共 147 条，关键词 71 个。
 
 | 关键词 | 条目 | 标题 |
 |---|---|---|
@@ -53,6 +53,7 @@
 | `（无关键词）` | ERR-OPS-1221 | `Where-Object { $_.CommandLine -like '*关键词*' }` 匹配到正在执行这条命令的自己，然后把自己杀了 |
 | `（无关键词）` | ERR-OPS-1222 | 机器人说「看不了这张」其实一次都没看过 —— 脚本文件早就没了 |
 | `（无关键词）` | ERR-OPS-1224 | 装新插件报 tool "xxx" is already registered —— 旧插件的工具还活在内存里 |
+| `（无关键词）` | ERR-OPS-1227 | 她描述得很准，我却绕远路 —— 把「原话」当线索而不是证据 |
 | `（无关键词）` | ERR-OPS-841 | 失败日志 ID 写成 F-2026-10-23-0010（多一段日期），按 F-04 只追加标注 |
 | `（无关键词）` | ERR-OPS-843 | 取样瞬时导致误报 NapCat 掉线：把「某一刻没在听」当成「服务挂了」 |
 | `（无关键词）` | ERR-OPS-845 | journey-sampler 计划任务写成 LogonTrigger，描述却写 every 20min，21.5 小时没触发 |
@@ -142,6 +143,7 @@
 | `INVALID_PARAMS` | ERR-DSH-1206 | `agents-anywhere-runtime` 持续刷 `sync.failed` / `rpc.failed INVALID_PARAMS` |
 | `MAX_MEDIA_BYTES` | ERR-QQ-014 | 桥接里的 JS 引用错误三连：TDZ / 局部变量误用 / 可调用对象当对象用 |
 | `MCP` | ERR-MEDIA-777 | 视频端点只回帧数组、表情端点只回原图，视频与表情对 AI 不可理解 |
+| `MCP` | ERR-OPS-1226 | 「工具全都报错」其实是整组消失 —— 一个 MCP server 崩了，它的所有工具一起没了 |
 | `MCP` | ERR-OPS-844 | 体检脚本把「查不出来」报成「确实没跑」：WMI 被拒后输出假结论 |
 | `MCP` | ERR-QQ-009 | MCP 静默 401：搬目录后所有发送/读图工具报「未授权」，查了 3 小时 |
 | `MEMORY` | ERR-OPS-008 | 多助手并发写 MEMORY：编号撞了 4 组，幂等判断还会静默跳过自己的内容 |
@@ -166,6 +168,7 @@
 | `PTC` | ERR-DSH-667 | 进程级切 PTC 后全部有历史的会话永久 400：唯一工具被标 deferLoading |
 | `PYTHONUTF8` | ERR-ENV-010 | Python 中文输出编码三连：rich emoji 崩、表格乱码、invalid PYTHONUTF8 |
 | `ReferenceError` | ERR-OPS-1223 | 用脚本改代码只插了调用没插定义 —— 进小屋 / 出小屋每次必报错 |
+| `ReferenceError` | ERR-OPS-1225 | `node --check` 通过但服务起不来 —— 缺 import 是运行时错误，语法阶段合法 |
 | `ReferenceError` | ERR-QQ-014 | 桥接里的 JS 引用错误三连：TDZ / 局部变量误用 / 可调用对象当对象用 |
 | `scopeOfKey` | ERR-QQ-728 | 长期记忆只分 private/shared，群与群之间串权（A 群秘密会漏到 B 群） |
 | `SDK` | ERR-DY-801 | 抖音评论采集链路失效：签名器路径写死 + SDK 缺失 + 输出协议不兼容 |

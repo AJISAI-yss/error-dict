@@ -3,7 +3,7 @@
   "license": "CC-BY-4.0",
   "generatedAt": "2026-11-03",
   "note": "本文件由 scripts/build.mjs 从 docs/error-dict/0x-*.md 生成，请勿手改。源文件是 markdown。",
-  "count": 144,
+  "count": 147,
   "byClass": {
     "COST": 4,
     "DSH": 25,
@@ -11,7 +11,7 @@
     "ENV": 24,
     "MEDIA": 16,
     "NET": 5,
-    "OPS": 35,
+    "OPS": 38,
     "QQ": 29
   },
   "entries": [
@@ -1527,6 +1527,51 @@
       "rollback": "插件配置在 `cordis.patch.yml`，改动前先备份",
       "guard": "换插件前先 grep 两个包的工具名，重叠的先算进「必须重启」的代价里",
       "related": "ERR-DSH-1214"
+    },
+    {
+      "id": "ERR-OPS-1225",
+      "cls": "OPS",
+      "title": "`node --check` 通过但服务起不来 —— 缺 import 是运行时错误，语法阶段合法",
+      "symptom": "改完 `*-tools.js`，`node --check` 显示通过，但 MCP 服务起不来，相关工具全部报错。搜索关键词：node --check 通过 但起不来 / ReferenceError z is not defined / tools 文件缺 import",
+      "rawError": "file:///<workspace>/projects/qq-bridge/src/mc-tools.js:98 ReferenceError: z is not defined",
+      "trigger": "新建 `*-tools.js`，文件头只 import 了 `node:fs`，但 schema 里用了 `z.enum` / `z.number`",
+      "rootCause": "**`node --check` 只做语法分析**。未导入的标识符在语法阶段完全合法，要到运行时才炸。所以「语法通过」和「能启动」是两个不同的门，前者不保证后者",
+      "impact": "整个 MCP server 起不来，它提供的**一整组**工具全部消失（见 ERR-OPS-1226）",
+      "fix": "补 `import { z } from 'zod';`，与同目录其它 tools 文件保持一致",
+      "evidence": "DSH 日志 2026-10-30T14:55:25.685Z 该栈；补 import 后启动输出 `[tool-fold] 已折叠 82 个冷工具`，无栈",
+      "rollback": "tools 文件在 git 里，可 `git checkout` 回上一个可用版本",
+      "guard": "改任何 `*-tools.js` / `mcp-*.js` 后跑 `node scripts\\验收-mcp工具清单.mjs`（真启进程 + initialize + tools/list），**看到工具数才算改完**。语法检查不是启动检查",
+      "related": "ERR-OPS-1226、ERR-OPS-1227"
+    },
+    {
+      "id": "ERR-OPS-1226",
+      "cls": "OPS",
+      "title": "「工具全都报错」其实是整组消失 —— 一个 MCP server 崩了，它的所有工具一起没了",
+      "symptom": "所有相关工具同时报错，包括平时只读、不可能坏的那些；但挨个看每个工具「都好好的」。搜索关键词：工具全都报错 / 读消息的工具报错 / 连等消息的也不行 / 工具集体消失",
+      "rawError": "`读消息的那个工具这阵子一直报错，群里现在说什么我没法看到` / `读消息的工具这会儿全都报错，连等消息的也不行`",
+      "trigger": "某个 MCP server 进程崩溃或启动失败",
+      "rootCause": "**一个 MCP server 提供一整组工具。进程没了，DSH 把这组工具整批从工具表摘掉。** 表现是「所有工具不可用」，不是「某个工具报错」——所以逐个查工具方向就错了。另外 `cordis.patch.yml` 的 `dsh-mcp-client` 没有重连/重试配置，崩过一次就不会自己回来",
+      "impact": "整组能力静默失效，且因为没有任何单点报错，极易被误判成鉴权/网络问题",
+      "fix": "先查进程，不是查工具\n```\nGet-CimInstance Win32_Process -Filter \"Name='node.exe'\" |\nWhere-Object { $_.CommandLine -like '*<server>.js*' }\n```\n进程不在 → 手动跑一次看崩在哪 → **必须重启 DSH** 才能让工具回来",
+      "evidence": "23:55:25 server 崩 → 进程表无 `mcp-snowluma-safe.js` → 她 23:56 / 23:59 两次报告工具全错；重启 DSH 后进程回来、工具恢复",
+      "rollback": "崩溃原因定位后按 ERR-OPS-1225 修；无数据损失",
+      "guard": "**听到「工具全都报错」，第一步是查 server 进程**。这个症状是\"整组\"级别的，不是\"单个\"级别的",
+      "related": "ERR-OPS-1225、ERR-OPS-1227"
+    },
+    {
+      "id": "ERR-OPS-1227",
+      "cls": "OPS",
+      "title": "她描述得很准，我却绕远路 —— 把「原话」当线索而不是证据",
+      "symptom": "对方用自然语言描述了故障，事实也对，但我查了网络、查了鉴权、查了 inode，绕一大圈才回到正题。搜索关键词：排查绕远路 / 查了半天没头绪 / 她说工具报错我去查401",
+      "rawError": "（不是报错，是人的原话）`读消息的工具这会儿全都报错，连等消息的也不行`",
+      "trigger": "对方用自然语言描述故障，而代码里存在多个可疑层（HTTP 鉴权 / token / 缓存 / 进程）",
+      "rootCause": "**把「对方的描述」当成线索，而不是证据。** 她说「工具报错」时，事实是「工具不存在」——这两句在脑内被自动翻译成了「接口 401」。翻译这一步没有依据，但没被察觉",
+      "impact": "排查时间放大一个数量级（这次 6 分钟绕路，手动启一次 server 就看见栈）",
+      "fix": "排查顺序定死，不许跳\n```\n① 她说了什么   ← 先读原话，逐字抄下来\n② 日志         ← 看时序对不对得上她说的时间\n③ 代码         ← 最后，而且只看命中的那几行\n```",
+      "evidence": "这次她说「工具报错」，先查 bridge 的 401（0 条）、查 token 长度、查端口，耗 6 分钟；手动启 server 立刻看见栈。同一模式 2026-10-30 也犯过一次（她说信箱没新的，我去查 inode）",
+      "rollback": "不涉及改动",
+      "guard": "**把对方的原话逐字抄下来，作为第一条证据**，再开始查。原话里的每个词都要当真：「全都」= 整组，「一直」= 持续，「这会儿」= 刚发生",
+      "related": "ERR-OPS-1226"
     },
     {
       "id": "ERR-QQ-001",
