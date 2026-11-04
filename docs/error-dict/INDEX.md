@@ -2,7 +2,7 @@
 
 > 自动生成，请勿手改。找错误时先在这里搜关键词。
 
-共 147 条，关键词 71 个。
+共 150 条，关键词 72 个。
 
 | 关键词 | 条目 | 标题 |
 |---|---|---|
@@ -54,6 +54,8 @@
 | `（无关键词）` | ERR-OPS-1222 | 机器人说「看不了这张」其实一次都没看过 —— 脚本文件早就没了 |
 | `（无关键词）` | ERR-OPS-1224 | 装新插件报 tool "xxx" is already registered —— 旧插件的工具还活在内存里 |
 | `（无关键词）` | ERR-OPS-1227 | 她描述得很准，我却绕远路 —— 把「原话」当线索而不是证据 |
+| `（无关键词）` | ERR-OPS-1228 | 重置会话之后她不说话 —— bootstrap 唤醒被当成「系统自己找上门」限流掉了 |
+| `（无关键词）` | ERR-OPS-1229 | 手动叫醒一次后，接下来十分钟定时唤醒全都不动 |
 | `（无关键词）` | ERR-OPS-841 | 失败日志 ID 写成 F-2026-10-23-0010（多一段日期），按 F-04 只追加标注 |
 | `（无关键词）` | ERR-OPS-843 | 取样瞬时导致误报 NapCat 掉线：把「某一刻没在听」当成「服务挂了」 |
 | `（无关键词）` | ERR-OPS-845 | journey-sampler 计划任务写成 LogonTrigger，描述却写 every 20min，21.5 小时没触发 |
@@ -141,6 +143,7 @@
 | `HOME` | ERR-ENV-302 | 给 $HOME 赋值当移动目标，$dst 变空，9 个项目被移到了 C:\Users\<user> |
 | `ImportError` | ERR-MEDIA-009 | gfx1031 上的三连崩：comfy_kitchen 缺 kernel、fp8 编码器、KJNodes import triton |
 | `INVALID_PARAMS` | ERR-DSH-1206 | `agents-anywhere-runtime` 持续刷 `sync.failed` / `rpc.failed INVALID_PARAMS` |
+| `LEVELS` | ERR-OPS-1230 | 工具看得见、一调就说「不在审批表里」 |
 | `MAX_MEDIA_BYTES` | ERR-QQ-014 | 桥接里的 JS 引用错误三连：TDZ / 局部变量误用 / 可调用对象当对象用 |
 | `MCP` | ERR-MEDIA-777 | 视频端点只回帧数组、表情端点只回原图，视频与表情对 AI 不可理解 |
 | `MCP` | ERR-OPS-1226 | 「工具全都报错」其实是整组消失 —— 一个 MCP server 崩了，它的所有工具一起没了 |

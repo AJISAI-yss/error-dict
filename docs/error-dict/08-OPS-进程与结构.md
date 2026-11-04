@@ -3,7 +3,7 @@
 > 这一卷收「进程被带走 / 计划任务没触发 / 目录写不进 / 沙箱拒绝」这类问题。
 > 新增词条直接往下追加，骨架见 [_TEMPLATE.md](_TEMPLATE.md)。
 
-共 38 条。
+共 41 条。
 
 ## ERR-OPS-001 | 计划任务 LastTaskResult: 0 根本不能证明跑成功（WScript.Shell.Run 不解析 >>）
 
@@ -450,3 +450,42 @@
 - 回滚点: 不涉及改动
 - 防护: **把对方的原话逐字抄下来，作为第一条证据**，再开始查。原话里的每个词都要当真：「全都」= 整组，「一直」= 持续，「这会儿」= 刚发生
 - 关联: ERR-OPS-1226
+
+## ERR-OPS-1228 | 重置会话之后她不说话 —— bootstrap 唤醒被当成「系统自己找上门」限流掉了
+
+- 症状: 重置会话 / 换页之后她不说话；唤醒返回 `ok:true` 但人没醒；日志只有一行「冷却中，跳过」，没有任何报错。搜索关键词：重置会话后不说话 / 唤醒返回成功但没醒 / 系统类唤醒冷却中 / bootstrap 被拦
+- 错误原文: `[reserved2] 系统类唤醒冷却中，跳过 private:<uin>（bootstrap，距上次 89s）`
+- 触发条件: reserved2 模式；会话刚被 `retireSession` 退役重建（换页 / 重置 / 权限变化 / DSH 侧 not-found）；上一个会话在 10 分钟内发生过 `timeout` / `replyCheck` / `proactiveCheck` 唤醒；新会话收到的第一条消息触发 `bootstrap`
+- 根因: 三层叠加 ① `bootstrap` 在 `TIMER_WAKE_REASONS` 里，被当成「系统自己找上门的唤醒」受 10 分钟冷却，但它是「会话首次唤醒」，**天然只发生一次**；② `retireSession` 不复位 `lastTimerWakeAt`，新会话第一次唤醒撞上旧会话的时间戳；③ 冷却分支直接 `return`，不排重试，这一轮唤醒彻底消失，而调用方拿到 `{ok:true}`
+- 影响: 会话重置后的第一批消息全部丢失，且调用方收到成功，不会重试。她"不说话"而系统认为"已经叫过了"
+- 解决: ① 新增 `WAKE_COOLDOWN_EXEMPT_REASONS = ['bootstrap','admin']` + `isWakeCooldownExempt()`；`timerLikeWake = isTimerWakeReason && !isWakeCooldownExempt`；② 只有 `timerLikeWake` 才写 `lastTimerWakeAt`（否则豁免的唤醒会反过来吞掉之后的 timeout）；③ `retireSession` 复位 `lastTimerWakeAt` / `wakeTimes` / `wakeConfig.lastWakeAt` / `lastWakeReason`。**不要**从 `TIMER_WAKE_REASONS` 删 `bootstrap`/`admin` —— 那个集合还决定「重试/补发要不要用未读水位判断」
+- 证据: 2026-10-30 03:23:45 真实日志；`git diff --stat` 34 行（+31/-3）；`node --check` 通过；裸 LF = 0；自测脚本 `_workspace/selftest-bootstrap-cooldown-20261030.mjs` 8 种情形全过
+- 回滚点: _backup/bridge.js.bak-20261030-035841-before-bootstrap-cooldown
+- 防护: ① 判断「这个 reason 要不要进限流集合」时先问：它是**周期性**动作还是**一次性**动作？② 「会话退役 = 状态机归零」：所有属于上一代会话的记账（时间戳 / 滑动窗口 / 上次原因）必须一起清；③ 限流分支 `return` 前想清楚：被丢掉之后还有没有人会再叫一次？
+- 关联: ERR-OPS-1229、ERR-OPS-1230
+
+## ERR-OPS-1229 | 手动叫醒一次后，接下来十分钟定时唤醒全都不动
+
+- 症状: 手动 `admin` 叫醒过一次，之后十分钟内的定时唤醒一个都不动。搜索关键词：手动叫醒后定时不动 / admin 唤醒把 timeout 吞了 / 后面十分钟没反应
+- 错误原文: `（无报错，表现是静默不触发）`
+- 触发条件: 使用 `admin` 原因手动唤醒一次
+- 根因: `admin` 虽然豁免了冷却**判断**，但它写基线那行用的是 `isTimerWakeReason`——于是手动唤醒等于给所有 timeout 上了一次 10 分钟冷却。**豁免和记账用了两套判断**
+- 影响: 人工干预之后十分钟内自动唤醒全哑，容易误判成"定时任务坏了"
+- 解决: 让写入条件也走 `timerLikeWake`（同一个变量同时决定「要不要判断冷却」和「要不要记账」）
+- 证据: 同型历史 —— `admin` 唤醒曾在 2026-10-22 15:17 也被这 10 分钟冷却拦过
+- 回滚点: 同 ERR-OPS-1228 的备份
+- 防护: **「豁免判断」和「写记账」必须用同一个布尔量。** 用两套条件算，迟早出现「允许执行但记了一笔扣费」这类不对称
+- 关联: ERR-OPS-1228
+
+## ERR-OPS-1230 | 工具看得见、一调就说「不在审批表里」
+
+- 症状: 工具在工具表里能查到，`tool_find` 也找得到，但真正执行时被拒：「这一步要人批准 —— 这个工具（xxx）不在审批表里」。搜索关键词：不在审批表里 / 工具要人批准 / fail-closed 拦住 / tool_use 能调但执行被拒
+- 错误原文: `🟡 这一步要人批准 —— 这个工具（my_state）不在审批表里。按 fail-closed 原则先拦住 —— 填进 LEVELS 表就能用。`
+- 触发条件: 新加了一个 MCP 工具（`server.tool(...)` 注册进 `mcp-snowluma-safe.js`），工具确实进了工具表，但 `approval-gate` 的三张表都没有它
+- 根因: 两层，缺一不可 ① 审批门是 **fail-closed**：`allow` / `confirm` / `deny` 三张表都不命中 → `unknown` → 拒；新工具默认落在 unknown。② **`tool_use` 本身虽然在 `allow` 里，但它内部对真正要执行的那个工具会再走一次 `check()`**（`makeMetaTools` → `callTool`）。所以「`tool_use` 放行」不等于「它能调的任意工具也放行」——靠 `tool_use` 兜底是错的
+- 影响: 新工具"装了但用不了"，且错误提示看起来像是权限问题，容易去查鉴权而不去查审批表
+- 解决: 在 `src/approval-gate.js` 的 `allow` 数组里加一条正则 `/^my_state$/`。**改完必须重启 bridge**（`restart.bat`）——审批表是启动时加载的
+- 证据: `node -e "import('./src/approval-gate.js').then(m=>{console.log(m.check('my_state',{},{who:'agent'}));console.log(m.check('qq_admin_api',{},{who:'agent'}));})"` → 新工具 `{allow:true,level:'allow'}`，对照组 `deny`
+- 回滚点: 删掉那条正则 + 重启。无其他副作用（只是少放行一个工具）
+- 防护: **新增 MCP 工具后，判据不是「她能看见这个工具」，是「她能调通一次」。** 同类历史：`video_understand` / `transcribe_audio`（2026-10-29）、`gift_open` / `world_go`（2026-10-31）
+- 关联: ERR-OPS-1225（同类：注册成功 ≠ 能用）、ERR-OPS-1226
