@@ -216,20 +216,12 @@ if (CHECK_ONLY) {
 const JSON_FILE = path.join(DICT, 'error-dict.json');
 const INDEX_FILE = path.join(DICT, 'INDEX.md');
 
-// generatedAt 只在内容变化时才刷新，否则每天 diff 里都是一行噪音
-const entriesKey = JSON.stringify(entries);
-let generatedAt = new Date().toISOString().slice(0, 10);
-if (fs.existsSync(JSON_FILE)) {
-  try {
-    const prev = JSON.parse(fs.readFileSync(JSON_FILE, 'utf8'));
-    if (JSON.stringify(prev.entries) === entriesKey && prev.generatedAt) generatedAt = prev.generatedAt;
-  } catch { /* 旧文件坏了就重写 */ }
-}
-
+// 不写 generatedAt：这是可以从 git log 推导出来的冗余字段，而它每天都变，
+// 会每天产生一条「只有日期不同」的空提交，把提交历史冲淡。
+// 2026-11-05 人类选 D：产物只管内容，「什么时候生成的」交给 git。
 const doc = {
   version: VERSION,
   license: 'CC-BY-4.0',
-  generatedAt,
   note: '本文件由 scripts/build.mjs 从 docs/error-dict/0x-*.md 生成，请勿手改。源文件是 markdown。',
   count: entries.length,
   byClass,

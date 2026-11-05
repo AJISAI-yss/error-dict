@@ -86,6 +86,12 @@ grep -rn "Authentication failed" docs/error-dict/*.md
 
 **markdown 是源文件，JSON 和 INDEX 都是派生物。** 只改 md，别手改生成物。
 
+> **关于「数据是哪天的」**：`error-dict.json` **不写生成日期字段**。
+> 想知道某条词条什么时候加进来，看 `git log -p docs/error-dict/0x-*.md`；
+> 想知道当前库的状态，看 `git log -1 --format=%ci`。
+> 理由：生成日期每天都变，写进产物会让每天多出一条「只有日期不同」的空提交，
+> 把真正的改动淹没。**时间维度交给 git，产物只管内容。**
+
 ## 自己加词条
 
 ```bash
